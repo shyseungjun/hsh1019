@@ -4,7 +4,7 @@ import fetch from 'node-fetch';
 
 const PORT = process.env.PORT || 3000;
 const TOONATION_TOKEN = process.env.TOONATION_TOKEN;
-const GOOGLE_SCRIPT_URL = '여기에_네_웹앱_URL';
+const GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbw18Sdii1PodPwDKggL0nqF64qW0WEkLwAm-dghkR0Q4fJKLoPmQbcIIM6BtpfVmZbIXQ/exec';
 
 http.createServer((req, res) => {
   res.writeHead(200);
