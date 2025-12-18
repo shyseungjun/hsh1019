@@ -1,72 +1,99 @@
-import WebSocket from 'ws';
-import fetch from 'node-fetch';
 import http from 'http';
+import puppeteer from 'puppeteer';
+import fetch from 'node-fetch';
 
 const PORT = process.env.PORT || 3000;
+
+// ⚠️ 네 Alertbox 토큰
 const TOONATION_TOKEN = process.env.TOONATION_TOKEN;
 
-// ⚠️ 네 Apps Script WebApp URL 넣기
-const GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbw18Sdii1PodPwDKggL0nqF64qW0WEkLwAm-dghkR0Q4fJKLoPmQbcIIM6BtpfVmZbIXQ/exec';
+// ⚠️ 네 Apps Script WebApp URL
+const GOOGLE_SCRIPT_URL = '여기에_네_웹앱_URL';
 
 if (!TOONATION_TOKEN) {
   console.error('❌ TOONATION_TOKEN 없음');
   process.exit(1);
 }
 
-console.log('서버 시작됨');
-
-// Render용 HTTP 서버 (필수)
+// Render는 HTTP 서버가 떠 있어야 안정적
 http.createServer((req, res) => {
   res.writeHead(200);
-  res.end('Donation WebSocket Server Running');
+  res.end('Donation Headless Server Running');
 }).listen(PORT);
 
-// 투네이션 WebSocket 연결
-function connectToonation() {
-  const wsUrl = `wss://socket.toon.at/alert?token=${TOONATION_TOKEN}`;
-  console.log('🔌 투네이션 WebSocket 연결 시도');
+console.log('서버 시작됨');
 
-  const ws = new WebSocket(wsUrl);
+// Alertbox URL
+const ALERTBOX_URL = `https://toon.at/widget/alertbox/${TOONATION_TOKEN}`;
 
-  ws.on('open', () => {
-    console.log('✅ 투네이션 WebSocket 연결 성공');
-  });
+// 후원 이벤트 처리
+async function handleDonation(payload) {
+  const nickname = payload?.name || payload?.nickname;
+  const amount = Number(payload?.amount || payload?.value);
 
-  ws.on('message', async (msg) => {
-    try {
-      const data = JSON.parse(msg.toString());
+  if (!nickname || !amount) return;
 
-      // 후원 이벤트만 처리
-      if (data.type !== 'donation') return;
+  console.log(`💰 후원 수신: ${nickname} / ${amount}`);
 
-      const nickname = data.nickname;
-      const amount = Number(data.amount);
-
-      if (!nickname || !amount) return;
-
-      console.log(`💰 후원: ${nickname} / ${amount}`);
-
-      // Apps Script로 전송
-      await fetch(GOOGLE_SCRIPT_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ nickname, amount })
-      });
-
-    } catch (err) {
-      console.error('메시지 처리 오류:', err);
-    }
-  });
-
-  ws.on('close', () => {
-    console.warn('⚠️ WebSocket 끊김, 5초 후 재연결');
-    setTimeout(connectToonation, 5000);
-  });
-
-  ws.on('error', (err) => {
-    console.error('WebSocket 에러:', err);
-    ws.close();
+  await fetch(GOOGLE_SCRIPT_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ nickname, amount })
   });
 }
 
-connectToonation();
+// Headless 브라우저 실행
+async function run() {
+  console.log('🧠 Headless 브라우저 시작');
+
+  const browser = await puppeteer.launch({
+    headless: 'new',
+    args: [
+      '--no-sandbox',
+      '--disable-setuid-sandbox',
+      '--disable-dev-shm-usage'
+    ]
+  });
+
+  const page = await browser.newPage();
+
+  // 페이지 콘솔 로그 감시 (Alertbox가 콘솔로 이벤트를 찍는 경우)
+  page.on('console', async (msg) => {
+    try {
+      const text = msg.text();
+      // 콘솔에 찍히는 JSON 중 donation 이벤트만 파싱
+      if (text.includes('donation')) {
+        const json = JSON.parse(text);
+        if (json?.type === 'donation') {
+          await handleDonation(json);
+        }
+      }
+    } catch (e) {}
+  });
+
+  // 네트워크 응답 감시 (XHR/WS 프레임에서 JSON 떨어지는 경우)
+  page.on('response', async (response) => {
+    try {
+      const url = response.url();
+      if (!url.includes('toon')) return;
+
+      const ct = response.headers()['content-type'] || '';
+      if (!ct.includes('application/json')) return;
+
+      const data = await response.json();
+      if (data?.type === 'donation') {
+        await handleDonation(data);
+      }
+    } catch (e) {}
+  });
+
+  console.log('🔗 Alertbox 접속:', ALERTBOX_URL);
+  await page.goto(ALERTBOX_URL, { waitUntil: 'networkidle2' });
+
+  console.log('✅ Alertbox 로드 완료, 대기 중...');
+}
+
+run().catch(err => {
+  console.error('❌ 치명적 오류:', err);
+  process.exit(1);
+});
