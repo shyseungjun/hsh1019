@@ -13,8 +13,8 @@ if (!TOONATION_TOKEN) {
 http.createServer((req, res) => {
   res.writeHead(200);
   res.end('OK');
-}).listen(PORT, () => {
-  console.log('✅ HTTP 서버 리슨 중:', PORT);
+}).listen(PORT, '0.0.0.0', () => {
+  console.log(`✅ HTTP 서버 리슨 중: 0.0.0.0:${PORT}`);
 });
 
 const ALERTBOX_URL = `https://toon.at/widget/alertbox/${TOONATION_TOKEN}`;
