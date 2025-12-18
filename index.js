@@ -1,11 +1,15 @@
 import http from 'http';
 import puppeteer from 'puppeteer';
-import fetch from 'node-fetch';
 
 const PORT = process.env.PORT || 3000;
 const TOONATION_TOKEN = process.env.TOONATION_TOKEN;
-const GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbw18Sdii1PodPwDKggL0nqF64qW0WEkLwAm-dghkR0Q4fJKLoPmQbcIIM6BtpfVmZbIXQ/exec';
 
+if (!TOONATION_TOKEN) {
+  console.error('❌ TOONATION_TOKEN 없음');
+  process.exit(1);
+}
+
+// Render용 HTTP 서버 (필수)
 http.createServer((req, res) => {
   res.writeHead(200);
   res.end('OK');
@@ -13,18 +17,13 @@ http.createServer((req, res) => {
   console.log('✅ HTTP 서버 리슨 중:', PORT);
 });
 
-if (!TOONATION_TOKEN) {
-  console.error('❌ TOONATION_TOKEN 없음');
-  process.exit(1);
-}
-
 const ALERTBOX_URL = `https://toon.at/widget/alertbox/${TOONATION_TOKEN}`;
 
 async function run() {
   console.log('🧠 puppeteer 시작');
 
   const browser = await puppeteer.launch({
-    headless: true, // ← new ❌
+    headless: true,
     args: [
       '--no-sandbox',
       '--disable-setuid-sandbox',
@@ -42,7 +41,8 @@ async function run() {
 
   console.log('✅ Alertbox 로드 완료');
 
-  // ⚠️ 일단 이벤트 파싱은 잠시 꺼둠 (서버 안정화 먼저)
+  // 🔒 Render에서 프로세스 유지용 무한 대기
+  await new Promise(() => {});
 }
 
 run().catch(err => {
